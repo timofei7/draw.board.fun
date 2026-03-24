@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BoardSketch is a Unity drawing/notes app for the **board.fun** hardware — a 24" touchscreen game board (1920x1080 @ 60Hz, MediaTek Genio 700, Mali-G57 GPU, 4GB RAM). Users draw with their fingers and can switch tools by placing physical game pieces on the board.
+**draw.board.fun** is a Unity drawing/notes app for the **board.fun** hardware — a 24" touchscreen game board (1920x1080 @ 60Hz, MediaTek Genio 700, Mali-G57 GPU, 4GB RAM). Users draw with their fingers and can switch tools by placing physical game pieces on the board.
 
 ## Unity Project
 
