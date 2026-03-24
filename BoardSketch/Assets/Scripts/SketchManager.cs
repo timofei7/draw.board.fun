@@ -142,22 +142,50 @@ namespace BoardSketch
             var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
             foreach (var glyph in glyphs)
             {
-                if (glyph.phase == BoardContactPhase.Began && _pieceToolConfig != null)
+                if (glyph.phase.IsEndedOrCanceled())
+                    continue;
+
+                if (_pieceToolConfig == null)
                 {
-                    var entry = _pieceToolConfig.GetTool(glyph.glyphId);
-                    if (entry != null)
-                    {
-                        if (entry.isEraser)
-                            SetEraser();
-                        else
-                        {
-                            SetColor(entry.brushColor);
-                            SetBrushSize(entry.brushSize);
-                        }
-                    }
+                    // Discovery mode: log any detected glyph
+                    if (glyph.phase == BoardContactPhase.Began)
+                        Debug.Log("[BoardSketch] Glyph discovered: id=" + glyph.glyphId + " orientation=" + glyph.orientation);
+                    continue;
+                }
+
+                var dial = _pieceToolConfig.GetDial(glyph.glyphId);
+                if (dial == null)
+                {
+                    if (glyph.phase == BoardContactPhase.Began)
+                        Debug.Log("[BoardSketch] Unknown glyph id=" + glyph.glyphId);
+                    continue;
+                }
+
+                // Process dial rotation every frame
+                switch (dial.dialType)
+                {
+                    case PieceDialType.ColorWheel:
+                        var color = PieceToolConfig.OrientationToColor(glyph.orientation);
+                        SetColor(color);
+                        OnToolChangedByPiece?.Invoke();
+                        break;
+
+                    case PieceDialType.BrushSize:
+                        float size = PieceToolConfig.OrientationToSize(glyph.orientation, dial.minValue, dial.maxValue);
+                        SetBrushSize(size);
+                        OnToolChangedByPiece?.Invoke();
+                        break;
                 }
             }
         }
+
+        /// <summary>
+        /// Fired when a piece dial changes the current tool, so the toolbar can update its indicators.
+        /// </summary>
+        public event System.Action OnToolChangedByPiece;
+
+        public Color CurrentColor => _currentTool.color;
+        public float CurrentBrushSize => _currentTool.brushSize;
 
         // --- Public API for toolbar ---
 

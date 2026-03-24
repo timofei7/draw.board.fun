@@ -53,6 +53,24 @@ namespace BoardSketch
 
             SelectColor(Color.black);
             SelectSize(8f);
+
+            // Listen for piece-driven tool changes
+            if (_sketchManager) _sketchManager.OnToolChangedByPiece += OnPieceToolChanged;
+        }
+
+        private void OnDestroy()
+        {
+            if (_sketchManager) _sketchManager.OnToolChangedByPiece -= OnPieceToolChanged;
+        }
+
+        private void OnPieceToolChanged()
+        {
+            if (_colorIndicator) _colorIndicator.color = _sketchManager.CurrentColor;
+            if (_sizeIndicator)
+            {
+                float scale = _sketchManager.CurrentBrushSize / 24f;
+                _sizeIndicator.rectTransform.localScale = Vector3.one * Mathf.Max(scale, 0.3f);
+            }
         }
 
         private void SelectColor(Color color)

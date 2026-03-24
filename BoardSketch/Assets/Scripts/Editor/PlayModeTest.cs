@@ -59,6 +59,31 @@ namespace BoardSketch.Editor
             Debug.Log("[Test] === Gallery Flow Test Complete ===");
         }
 
+        [MenuItem("BoardSketch/Discover Piece IDs")]
+        public static void DiscoverPieceIds()
+        {
+            if (!Application.isPlaying)
+            {
+                Debug.Log("[Test] Must be in play mode. Place Arcade pieces on the board and run this.");
+                return;
+            }
+
+            var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
+            if (glyphs.Length == 0)
+            {
+                Debug.Log("[Test] No glyph contacts detected. Place pieces on the board first.");
+                return;
+            }
+
+            foreach (var g in glyphs)
+            {
+                Debug.Log("[Test] Piece: glyphId=" + g.glyphId
+                    + " orientation=" + (g.orientation * Mathf.Rad2Deg).ToString("F1") + "deg"
+                    + " pos=" + g.screenPosition
+                    + " touched=" + g.isTouched);
+            }
+        }
+
         [MenuItem("BoardSketch/Test Draw Pattern")]
         public static void TestDrawPattern()
         {
