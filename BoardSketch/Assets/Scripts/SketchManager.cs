@@ -60,11 +60,6 @@ namespace BoardSketch
 
             foreach (var contact in contacts)
             {
-                Debug.Log("[BoardSketch] Contact id=" + contact.contactId
-                    + " phase=" + contact.phase
-                    + " pos=" + contact.screenPosition
-                    + " screen=" + Screen.width + "x" + Screen.height);
-
                 switch (contact.phase)
                 {
                     case BoardContactPhase.Began:
