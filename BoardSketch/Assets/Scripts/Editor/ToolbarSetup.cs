@@ -6,9 +6,13 @@ namespace BoardSketch.Editor
 {
     public static class ToolbarSetup
     {
-        [MenuItem("BoardSketch/Setup Toolbar UI")]
-        public static void Setup()
+        [MenuItem("BoardSketch/Setup Full UI")]
+        public static void SetupFullUI()
         {
+            // Delete existing UICanvas if present
+            var existing = GameObject.Find("UICanvas");
+            if (existing) Undo.DestroyObjectImmediate(existing);
+
             var canvasGO = new GameObject("UICanvas");
             var canvas = canvasGO.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -21,13 +25,123 @@ namespace BoardSketch.Editor
 
             canvasGO.AddComponent<GraphicRaycaster>();
 
-            var toolbarGO = CreateUI("Toolbar", canvasGO.transform);
+            // --- Gallery View (shown on startup) ---
+            var galleryView = CreateUI("GalleryView", canvasGO.transform);
+            var galleryRect = galleryView.GetComponent<RectTransform>();
+            galleryRect.anchorMin = Vector2.zero;
+            galleryRect.anchorMax = Vector2.one;
+            galleryRect.sizeDelta = Vector2.zero;
+
+            var galleryBg = galleryView.AddComponent<Image>();
+            galleryBg.color = new Color(0.95f, 0.95f, 0.95f, 1f);
+
+            // Header
+            var header = CreateUI("Header", galleryView.transform);
+            var headerRect = header.GetComponent<RectTransform>();
+            headerRect.anchorMin = new Vector2(0, 0.85f);
+            headerRect.anchorMax = Vector2.one;
+            headerRect.sizeDelta = Vector2.zero;
+            headerRect.offsetMin = Vector2.zero;
+            headerRect.offsetMax = Vector2.zero;
+
+            var headerBg = header.AddComponent<Image>();
+            headerBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+
+            // Title
+            var title = CreateUI("Title", header.transform);
+            var titleRect = title.GetComponent<RectTransform>();
+            titleRect.anchorMin = new Vector2(0, 0);
+            titleRect.anchorMax = new Vector2(0.5f, 1);
+            titleRect.sizeDelta = Vector2.zero;
+            titleRect.offsetMin = new Vector2(40, 0);
+            titleRect.offsetMax = Vector2.zero;
+            var titleText = title.AddComponent<Text>();
+            titleText.text = "BoardSketch";
+            titleText.fontSize = 42;
+            titleText.alignment = TextAnchor.MiddleLeft;
+            titleText.color = Color.white;
+            titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            // New Sketch button
+            var newBtn = CreateUI("NewSketchBtn", header.transform);
+            var newBtnRect = newBtn.GetComponent<RectTransform>();
+            newBtnRect.anchorMin = new Vector2(1, 0.5f);
+            newBtnRect.anchorMax = new Vector2(1, 0.5f);
+            newBtnRect.pivot = new Vector2(1, 0.5f);
+            newBtnRect.anchoredPosition = new Vector2(-40, 0);
+            newBtnRect.sizeDelta = new Vector2(220, 60);
+
+            newBtn.AddComponent<Image>().color = new Color(0.2f, 0.6f, 1f, 1f);
+            newBtn.AddComponent<Button>();
+
+            var newLabel = CreateUI("Label", newBtn.transform);
+            var newLabelRect = newLabel.GetComponent<RectTransform>();
+            newLabelRect.anchorMin = Vector2.zero;
+            newLabelRect.anchorMax = Vector2.one;
+            newLabelRect.sizeDelta = Vector2.zero;
+            var newLabelText = newLabel.AddComponent<Text>();
+            newLabelText.text = "+ New Sketch";
+            newLabelText.fontSize = 26;
+            newLabelText.alignment = TextAnchor.MiddleCenter;
+            newLabelText.color = Color.white;
+            newLabelText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            // Scroll area with grid
+            var scrollArea = CreateUI("ScrollArea", galleryView.transform);
+            var scrollRect = scrollArea.GetComponent<RectTransform>();
+            scrollRect.anchorMin = Vector2.zero;
+            scrollRect.anchorMax = new Vector2(1, 0.85f);
+            scrollRect.sizeDelta = Vector2.zero;
+            scrollRect.offsetMin = new Vector2(40, 40);
+            scrollRect.offsetMax = new Vector2(-40, -20);
+
+            var gridContainer = CreateUI("GridContainer", scrollArea.transform);
+            var gridRect = gridContainer.GetComponent<RectTransform>();
+            gridRect.anchorMin = new Vector2(0, 1);
+            gridRect.anchorMax = new Vector2(1, 1);
+            gridRect.pivot = new Vector2(0.5f, 1);
+            gridRect.sizeDelta = new Vector2(0, 800);
+
+            var grid = gridContainer.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(280, 180);
+            grid.spacing = new Vector2(24, 24);
+            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+            grid.childAlignment = TextAnchor.UpperLeft;
+            grid.constraint = GridLayoutGroup.Constraint.Flexible;
+
+            var csf = gridContainer.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var scroll = scrollArea.AddComponent<ScrollRect>();
+            scroll.content = gridRect;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+
+            // Gallery Controller
+            var galleryCtrl = galleryView.AddComponent<GalleryController>();
+            var gallerySO = new SerializedObject(galleryCtrl);
+            gallerySO.FindProperty("_appState").objectReferenceValue = Object.FindAnyObjectByType<AppStateManager>();
+            gallerySO.FindProperty("_gridContainer").objectReferenceValue = gridContainer.transform;
+            gallerySO.FindProperty("_newSketchBtn").objectReferenceValue = newBtn.GetComponent<Button>();
+            gallerySO.ApplyModifiedProperties();
+
+            // --- Canvas View (toolbar, hidden on startup) ---
+            var canvasView = CreateUI("CanvasView", canvasGO.transform);
+            var canvasViewRect = canvasView.GetComponent<RectTransform>();
+            canvasViewRect.anchorMin = Vector2.zero;
+            canvasViewRect.anchorMax = Vector2.one;
+            canvasViewRect.sizeDelta = Vector2.zero;
+
+            // Toolbar panel
+            var toolbarGO = CreateUI("Toolbar", canvasView.transform);
             var toolbarRect = toolbarGO.GetComponent<RectTransform>();
             toolbarRect.anchorMin = new Vector2(0.5f, 0f);
             toolbarRect.anchorMax = new Vector2(0.5f, 0f);
             toolbarRect.pivot = new Vector2(0.5f, 0f);
             toolbarRect.anchoredPosition = new Vector2(0, 20);
-            toolbarRect.sizeDelta = new Vector2(1200, 70);
+            toolbarRect.sizeDelta = new Vector2(1300, 70);
 
             var toolbarImg = toolbarGO.AddComponent<Image>();
             toolbarImg.color = new Color(0.15f, 0.15f, 0.15f, 0.85f);
@@ -39,6 +153,12 @@ namespace BoardSketch.Editor
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
 
+            // Back button
+            var backBtn = MakeActionBtn("BackBtn", toolbarGO.transform, "\u2190");
+
+            MakeSep(toolbarGO.transform);
+
+            // Color buttons
             var blackBtn = MakeColorBtn("BlackBtn", toolbarGO.transform, Color.black);
             var redBtn = MakeColorBtn("RedBtn", toolbarGO.transform, new Color(0.9f, 0.2f, 0.2f));
             var blueBtn = MakeColorBtn("BlueBtn", toolbarGO.transform, new Color(0.2f, 0.4f, 0.9f));
@@ -70,9 +190,11 @@ namespace BoardSketch.Editor
             var sizeIndImg = sizeInd.AddComponent<Image>();
             sizeIndImg.color = Color.white;
 
+            // Wire ToolbarController
             var controller = toolbarGO.AddComponent<ToolbarController>();
             var so = new SerializedObject(controller);
-            so.FindProperty("_sketchManager").objectReferenceValue = Object.FindFirstObjectByType<SketchManager>();
+            so.FindProperty("_sketchManager").objectReferenceValue = Object.FindAnyObjectByType<SketchManager>();
+            so.FindProperty("_backBtn").objectReferenceValue = backBtn.GetComponent<Button>();
             so.FindProperty("_blackBtn").objectReferenceValue = blackBtn.GetComponent<Button>();
             so.FindProperty("_redBtn").objectReferenceValue = redBtn.GetComponent<Button>();
             so.FindProperty("_blueBtn").objectReferenceValue = blueBtn.GetComponent<Button>();
@@ -89,8 +211,19 @@ namespace BoardSketch.Editor
             so.FindProperty("_sizeIndicator").objectReferenceValue = sizeIndImg;
             so.ApplyModifiedProperties();
 
-            Undo.RegisterCreatedObjectUndo(canvasGO, "Create Toolbar UI");
-            Debug.Log("[BoardSketch] Toolbar UI created!");
+            // Wire AppStateManager
+            var appState = Object.FindAnyObjectByType<AppStateManager>();
+            if (appState)
+            {
+                var appSO = new SerializedObject(appState);
+                appSO.FindProperty("_sketchManager").objectReferenceValue = Object.FindAnyObjectByType<SketchManager>();
+                appSO.FindProperty("_galleryView").objectReferenceValue = galleryView;
+                appSO.FindProperty("_canvasView").objectReferenceValue = canvasView;
+                appSO.ApplyModifiedProperties();
+            }
+
+            Undo.RegisterCreatedObjectUndo(canvasGO, "Setup Full UI");
+            Debug.Log("[BoardSketch] Full UI created (gallery + toolbar)!");
         }
 
         static GameObject CreateUI(string name, Transform parent)

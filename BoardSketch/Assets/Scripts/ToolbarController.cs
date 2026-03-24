@@ -21,6 +21,7 @@ namespace BoardSketch
         [SerializeField] private Button _largeBtn;
 
         [Header("Action Buttons")]
+        [SerializeField] private Button _backBtn;
         [SerializeField] private Button _undoBtn;
         [SerializeField] private Button _clearBtn;
         [SerializeField] private Button _saveBtn;
@@ -45,6 +46,7 @@ namespace BoardSketch
             if (_mediumBtn) _mediumBtn.onClick.AddListener(() => SelectSize(12f));
             if (_largeBtn) _largeBtn.onClick.AddListener(() => SelectSize(24f));
 
+            if (_backBtn) _backBtn.onClick.AddListener(OnBack);
             if (_undoBtn) _undoBtn.onClick.AddListener(() => _sketchManager.Undo());
             if (_clearBtn) _clearBtn.onClick.AddListener(() => _sketchManager.ClearCanvas());
             if (_saveBtn) _saveBtn.onClick.AddListener(OnSave);
@@ -77,13 +79,20 @@ namespace BoardSketch
             }
         }
 
+        private void OnBack()
+        {
+            var appState = FindAnyObjectByType<AppStateManager>();
+            if (appState) appState.BackToGallery();
+        }
+
         private void OnSave()
         {
             byte[] png = _sketchManager.ExportToPNG();
-            string path = System.IO.Path.Combine(Application.persistentDataPath, "sketch_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png");
-            System.IO.File.WriteAllBytes(path, png);
+            var appState = FindAnyObjectByType<AppStateManager>();
+            string id = SketchStorage.SaveSketch(png, appState != null ? appState.CurrentSketchId : null);
+            if (appState != null) appState.CurrentSketchId = id;
             _sketchManager.MarkClean();
-            Debug.Log("[BoardSketch] Saved to " + path);
+            Debug.Log("[BoardSketch] Saved sketch: " + id);
         }
     }
 }

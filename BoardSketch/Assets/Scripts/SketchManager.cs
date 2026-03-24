@@ -13,6 +13,9 @@ namespace BoardSketch
         [SerializeField] private float _defaultBrushSize = 8f;
         [SerializeField] private int _maxUndoSteps = 20;
 
+        [Header("Piece Tools")]
+        [SerializeField] private PieceToolConfig _pieceToolConfig;
+
         private RenderTexture _drawRT;
         private Material _brushMat;
         private Material _canvasMat;
@@ -139,9 +142,19 @@ namespace BoardSketch
             var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
             foreach (var glyph in glyphs)
             {
-                if (glyph.phase == BoardContactPhase.Began)
+                if (glyph.phase == BoardContactPhase.Began && _pieceToolConfig != null)
                 {
-                    Debug.Log("[BoardSketch] Glyph detected: id=" + glyph.glyphId);
+                    var entry = _pieceToolConfig.GetTool(glyph.glyphId);
+                    if (entry != null)
+                    {
+                        if (entry.isEraser)
+                            SetEraser();
+                        else
+                        {
+                            SetColor(entry.brushColor);
+                            SetBrushSize(entry.brushSize);
+                        }
+                    }
                 }
             }
         }
