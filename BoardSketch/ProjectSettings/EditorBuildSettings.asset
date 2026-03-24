@@ -1,0 +1,10 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes: []
+  m_configObjects:
+    fun.board.input.settings: {fileID: 11400000, guid: 476af80e2920c4bb48b0dcb2e91e88e9, type: 2}
+    fun.board.settings: {fileID: 11400000, guid: c521bda85fcea4134914e1b92cf6ff81, type: 2}
