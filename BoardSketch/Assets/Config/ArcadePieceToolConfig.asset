@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5b429dc78bce4b20b4bc340268bd7d8, type: 3}
+  m_Name: ArcadePieceToolConfig
+  m_EditorClassIdentifier: Assembly-CSharp::BoardSketch.PieceToolConfig
+  dials:
+  - glyphId: 5
+    label: Ship Yellow - Color Wheel
+    dialType: 0
+    minValue: 2
+    maxValue: 40
+  - glyphId: 6
+    label: Ship Purple - Size Dial
+    dialType: 1
+    minValue: 2
+    maxValue: 40
+  - glyphId: 7
+    label: Ship Orange - Eraser
+    dialType: 2
+    minValue: 2
+    maxValue: 40

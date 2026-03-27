@@ -290,5 +290,51 @@ namespace BoardSketch.Editor
             go.GetComponent<RectTransform>().sizeDelta = new Vector2(2, 40);
             go.AddComponent<Image>().color = new Color(0.5f, 0.5f, 0.5f, 0.4f);
         }
+
+        [MenuItem("BoardSketch/Create Piece Config")]
+        public static void CreatePieceConfig()
+        {
+            var config = ScriptableObject.CreateInstance<PieceToolConfig>();
+            config.dials = new PieceToolConfig.PieceDial[]
+            {
+                new PieceToolConfig.PieceDial
+                {
+                    glyphId = 5,
+                    label = "Ship Yellow - Color Wheel",
+                    dialType = PieceDialType.ColorWheel
+                },
+                new PieceToolConfig.PieceDial
+                {
+                    glyphId = 6,
+                    label = "Ship Purple - Size Dial",
+                    dialType = PieceDialType.BrushSize,
+                    minValue = 2f,
+                    maxValue = 40f
+                },
+                new PieceToolConfig.PieceDial
+                {
+                    glyphId = 7,
+                    label = "Ship Orange - Eraser",
+                    dialType = PieceDialType.Eraser
+                }
+            };
+
+            if (!AssetDatabase.IsValidFolder("Assets/Config"))
+                AssetDatabase.CreateFolder("Assets", "Config");
+
+            AssetDatabase.CreateAsset(config, "Assets/Config/ArcadePieceToolConfig.asset");
+            AssetDatabase.SaveAssets();
+
+            // Wire to SketchManager
+            var sketchMgr = Object.FindAnyObjectByType<SketchManager>();
+            if (sketchMgr != null)
+            {
+                var so = new SerializedObject(sketchMgr);
+                so.FindProperty("_pieceToolConfig").objectReferenceValue = config;
+                so.ApplyModifiedProperties();
+            }
+
+            Debug.Log("[BoardSketch] Piece config created: Yellow(5)=ColorWheel, Purple(6)=SizeDial, Orange(7)=Eraser");
+        }
     }
 }

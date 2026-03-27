@@ -172,24 +172,78 @@ namespace BoardSketch
             _pixelsDirty = true;
         }
 
+        [Header("UI")]
+        [SerializeField] private Transform _uiOverlayParent; // parent for piece indicator overlays
+
+        private Dictionary<int, PieceIndicatorUI> _activeIndicators = new Dictionary<int, PieceIndicatorUI>();
+        private ToolState _previousTool; // saved before eraser, restored on lift
+
         private void HandleGlyphInput()
         {
             var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
+
+            // Track which glyphs are active this frame
+            var activeGlyphs = new HashSet<int>();
+
             foreach (var glyph in glyphs)
             {
-                if (glyph.phase.IsEndedOrCanceled())
-                    continue;
-
                 if (_pieceToolConfig == null)
                 {
                     if (glyph.phase == BoardContactPhase.Began)
-                        Debug.Log("[BoardSketch] Glyph discovered: id=" + glyph.glyphId);
+                        Debug.Log("[BoardSketch] Glyph discovered: id=" + glyph.glyphId + " orientation=" + glyph.orientation);
                     continue;
                 }
 
                 var dial = _pieceToolConfig.GetDial(glyph.glyphId);
                 if (dial == null) continue;
 
+                if (glyph.phase.IsEndedOrCanceled())
+                {
+                    // Remove indicator and handle eraser revert
+                    if (_activeIndicators.TryGetValue(glyph.contactId, out var ind))
+                    {
+                        Destroy(ind.gameObject);
+                        _activeIndicators.Remove(glyph.contactId);
+                    }
+                    if (dial.dialType == PieceDialType.Eraser && _previousTool != null)
+                    {
+                        _currentTool.color = _previousTool.color;
+                        _currentTool.brushSize = _previousTool.brushSize;
+                        _currentTool.isEraser = false;
+                        _previousTool = null;
+                        OnToolChangedByPiece?.Invoke();
+                    }
+                    continue;
+                }
+
+                activeGlyphs.Add(glyph.contactId);
+
+                // Spawn indicator on Began
+                if (glyph.phase == BoardContactPhase.Began && _uiOverlayParent != null)
+                {
+                    if (!_activeIndicators.ContainsKey(glyph.contactId))
+                    {
+                        var indicator = PieceIndicatorUI.Create(_uiOverlayParent, dial.dialType, glyph.screenPosition);
+                        _activeIndicators[glyph.contactId] = indicator;
+                    }
+
+                    // Save tool state before eraser
+                    if (dial.dialType == PieceDialType.Eraser)
+                    {
+                        _previousTool = new ToolState(_currentTool.color, _currentTool.brushSize, _currentTool.isEraser);
+                        SetEraser();
+                        OnToolChangedByPiece?.Invoke();
+                    }
+                }
+
+                // Update indicator position and value every frame
+                if (_activeIndicators.TryGetValue(glyph.contactId, out var activeInd))
+                {
+                    activeInd.UpdatePosition(glyph.screenPosition);
+                    activeInd.UpdateValue(glyph.orientation);
+                }
+
+                // Apply dial value
                 switch (dial.dialType)
                 {
                     case PieceDialType.ColorWheel:
@@ -201,6 +255,19 @@ namespace BoardSketch
                         OnToolChangedByPiece?.Invoke();
                         break;
                 }
+            }
+
+            // Clean up indicators for pieces that vanished without Ended
+            var staleIndicators = new List<int>();
+            foreach (var kvp in _activeIndicators)
+            {
+                if (!activeGlyphs.Contains(kvp.Key))
+                    staleIndicators.Add(kvp.Key);
+            }
+            foreach (var id in staleIndicators)
+            {
+                Destroy(_activeIndicators[id].gameObject);
+                _activeIndicators.Remove(id);
             }
         }
 

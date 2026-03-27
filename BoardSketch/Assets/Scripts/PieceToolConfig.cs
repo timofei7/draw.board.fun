@@ -5,7 +5,8 @@ namespace BoardSketch
     public enum PieceDialType
     {
         ColorWheel,
-        BrushSize
+        BrushSize,
+        Eraser
     }
 
     [CreateAssetMenu(fileName = "PieceToolConfig", menuName = "BoardSketch/Piece Tool Config")]
