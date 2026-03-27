@@ -48,9 +48,9 @@ namespace BoardSketch
         public static Vector2 ScreenToCanvas(Vector2 screenPosition, Camera cam, int canvasW, int canvasH)
         {
 #if UNITY_EDITOR
-            // Editor: use camera projection to handle arbitrary Game View aspect
-            float screenY = Screen.height - screenPosition.y;
-            Vector3 worldPos = cam.ScreenToWorldPoint(new Vector3(screenPosition.x, screenY, 11f));
+            // Editor: use camera projection to handle arbitrary Game View aspect.
+            // Simulator screenPosition is already Y-up (from transform.position on ScreenSpaceOverlay Canvas).
+            Vector3 worldPos = cam.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, 11f));
             float rtX = (worldPos.x + 9.6f) / 19.2f * canvasW;
             float rtY = (worldPos.y + 5.4f) / 10.8f * canvasH;
             return new Vector2(rtX, rtY);

@@ -15,4 +15,4 @@ MonoBehaviour:
   m_TranslationSmoothing: 0.5
   m_RotationSmoothing: 0.5
   m_Persistence: 4
-  m_GlyphModelFilename: 
+  m_GlyphModelFilename: arcade_v1.3.7.tflite
