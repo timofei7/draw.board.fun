@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEditor;
-using System.Collections;
 using Board.Input;
 
 namespace BoardSketch.Editor
@@ -18,7 +17,6 @@ namespace BoardSketch.Editor
 
             var appState = Object.FindAnyObjectByType<AppStateManager>();
             var sketchMgr = Object.FindAnyObjectByType<SketchManager>();
-            var gallery = Object.FindAnyObjectByType<GalleryController>();
 
             if (appState == null || sketchMgr == null)
             {
@@ -28,60 +26,30 @@ namespace BoardSketch.Editor
 
             Debug.Log("[Test] === Starting Gallery Flow Test ===");
 
-            // Step 1: We should be on gallery screen
-            Debug.Log("[Test] Step 1: Gallery should be visible. Opening new sketch...");
+            Debug.Log("[Test] Step 1: Opening new sketch...");
             appState.NewSketch();
-            Debug.Log("[Test] Step 2: Canvas should now be visible. Drawing test strokes...");
 
-            // Step 2: Draw some strokes programmatically
+            Debug.Log("[Test] Step 2: Drawing test pattern...");
             DrawTestPattern(sketchMgr);
-            Debug.Log("[Test] Step 3: Test pattern drawn. IsDirty=" + sketchMgr.IsDirty);
 
-            // Step 3: Save
+            Debug.Log("[Test] Step 3: Saving...");
             byte[] png = sketchMgr.ExportToPNG();
             string id = SketchStorage.SaveSketch(png);
             appState.CurrentSketchId = id;
             sketchMgr.MarkClean();
-            Debug.Log("[Test] Step 4: Saved sketch id=" + id);
+            Debug.Log("[Test] Step 4: Saved id=" + id);
 
-            // Step 4: Back to gallery
             appState.BackToGallery();
             var sketches = SketchStorage.ListSketches();
-            Debug.Log("[Test] Step 5: Back to gallery. Saved sketches count=" + sketches.Count);
+            Debug.Log("[Test] Step 5: Gallery has " + sketches.Count + " sketches");
 
-            // Step 5: Reopen the sketch
             if (sketches.Count > 0)
             {
                 appState.OpenSketch(sketches[0].id);
-                Debug.Log("[Test] Step 6: Reopened sketch id=" + sketches[0].id + " desc=" + sketches[0].description);
+                Debug.Log("[Test] Step 6: Reopened " + sketches[0].description);
             }
 
             Debug.Log("[Test] === Gallery Flow Test Complete ===");
-        }
-
-        [MenuItem("BoardSketch/Discover Piece IDs")]
-        public static void DiscoverPieceIds()
-        {
-            if (!Application.isPlaying)
-            {
-                Debug.Log("[Test] Must be in play mode. Place Arcade pieces on the board and run this.");
-                return;
-            }
-
-            var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
-            if (glyphs.Length == 0)
-            {
-                Debug.Log("[Test] No glyph contacts detected. Place pieces on the board first.");
-                return;
-            }
-
-            foreach (var g in glyphs)
-            {
-                Debug.Log("[Test] Piece: glyphId=" + g.glyphId
-                    + " orientation=" + (g.orientation * Mathf.Rad2Deg).ToString("F1") + "deg"
-                    + " pos=" + g.screenPosition
-                    + " touched=" + g.isTouched);
-            }
         }
 
         [MenuItem("BoardSketch/Test Draw Pattern")]
@@ -100,75 +68,85 @@ namespace BoardSketch.Editor
                 return;
             }
 
-            // Make sure we're on canvas
             var appState = Object.FindAnyObjectByType<AppStateManager>();
             if (appState != null) appState.NewSketch();
 
             DrawTestPattern(sketchMgr);
-            Debug.Log("[Test] Draw pattern complete. IsDirty=" + sketchMgr.IsDirty);
+            Debug.Log("[Test] Draw pattern complete");
+        }
+
+        [MenuItem("BoardSketch/Discover Piece IDs")]
+        public static void DiscoverPieceIds()
+        {
+            if (!Application.isPlaying)
+            {
+                Debug.Log("[Test] Must be in play mode");
+                return;
+            }
+
+            var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
+            if (glyphs.Length == 0)
+            {
+                Debug.Log("[Test] No glyph contacts detected");
+                return;
+            }
+
+            foreach (var g in glyphs)
+            {
+                Debug.Log("[Test] Piece: glyphId=" + g.glyphId
+                    + " orientation=" + (g.orientation * Mathf.Rad2Deg).ToString("F1") + "deg"
+                    + " pos=" + g.screenPosition
+                    + " touched=" + g.isTouched);
+            }
         }
 
         private static void DrawTestPattern(SketchManager sketchMgr)
         {
-            var drawRT = sketchMgr.DrawRT;
-            var brushMat = new Material(Shader.Find("BoardSketch/BrushStamp"));
+            // Access the pixel buffer and texture via reflection or public API
+            // Draw directly using BrushRenderer.Stamp into the canvas
+            var pixels = sketchMgr.GetPixels();
+            if (pixels == null)
+            {
+                Debug.LogError("[Test] Could not get pixel buffer");
+                return;
+            }
 
-            // Draw a rectangle in the center
-            float cx = 960, cy = 540;
-            float w = 400, h = 300;
-            Color color = Color.black;
-            float size = 8f;
+            // Rectangle
+            var black = new Color32(0, 0, 0, 255);
+            DrawLineOnPixels(pixels, 1920, 1080, 760, 390, 1160, 390, 8f, black);
+            DrawLineOnPixels(pixels, 1920, 1080, 1160, 390, 1160, 690, 8f, black);
+            DrawLineOnPixels(pixels, 1920, 1080, 1160, 690, 760, 690, 8f, black);
+            DrawLineOnPixels(pixels, 1920, 1080, 760, 690, 760, 390, 8f, black);
 
-            // Top edge
-            DrawLine(drawRT, brushMat, cx - w / 2, cy + h / 2, cx + w / 2, cy + h / 2, color, size);
-            // Right edge
-            DrawLine(drawRT, brushMat, cx + w / 2, cy + h / 2, cx + w / 2, cy - h / 2, color, size);
-            // Bottom edge
-            DrawLine(drawRT, brushMat, cx + w / 2, cy - h / 2, cx - w / 2, cy - h / 2, color, size);
-            // Left edge
-            DrawLine(drawRT, brushMat, cx - w / 2, cy - h / 2, cx - w / 2, cy + h / 2, color, size);
+            // Red X
+            var red = new Color32(230, 50, 50, 255);
+            DrawLineOnPixels(pixels, 1920, 1080, 800, 430, 1120, 650, 6f, red);
+            // Blue X
+            var blue = new Color32(50, 100, 230, 255);
+            DrawLineOnPixels(pixels, 1920, 1080, 1120, 430, 800, 650, 6f, blue);
 
-            // Draw an X inside
-            DrawLine(drawRT, brushMat, cx - w / 3, cy + h / 3, cx + w / 3, cy - h / 3, new Color(0.9f, 0.2f, 0.2f), 6f);
-            DrawLine(drawRT, brushMat, cx + w / 3, cy + h / 3, cx - w / 3, cy - h / 3, new Color(0.2f, 0.4f, 0.9f), 6f);
-
-            Object.Destroy(brushMat);
+            sketchMgr.ApplyPixels();
         }
 
-        private static void DrawLine(RenderTexture rt, Material mat, float x1, float y1, float x2, float y2, Color color, float size)
+        private static void DrawLineOnPixels(Color32[] pixels, int w, int h,
+            float x1, float y1, float x2, float y2, float size, Color32 color)
         {
-            // These are already in RT coords (1920x1080), stamp directly
-            RenderTexture.active = rt;
-            GL.PushMatrix();
-            GL.LoadPixelMatrix(0, 1920, 1080, 0);
-
-            mat.SetColor("_Color", color);
-            mat.SetTexture("_BrushTex", BrushRenderer.GetDefaultBrushTexture());
-            mat.SetPass(0);
-
-            float spacing = Mathf.Max(size * 0.25f, 1f);
             Vector2 from = new Vector2(x1, y1);
             Vector2 to = new Vector2(x2, y2);
             Vector2 dir = to - from;
             float dist = dir.magnitude;
+            if (dist < 1f) return;
             dir /= dist;
+            float spacing = Mathf.Max(size * 0.3f, 1.5f);
 
             float traveled = 0;
             while (traveled <= dist)
             {
                 Vector2 pos = from + dir * traveled;
-                float half = size / 2f;
-                GL.Begin(GL.QUADS);
-                GL.TexCoord2(0, 0); GL.Vertex3(pos.x - half, pos.y - half, 0);
-                GL.TexCoord2(1, 0); GL.Vertex3(pos.x + half, pos.y - half, 0);
-                GL.TexCoord2(1, 1); GL.Vertex3(pos.x + half, pos.y + half, 0);
-                GL.TexCoord2(0, 1); GL.Vertex3(pos.x - half, pos.y + half, 0);
-                GL.End();
+                BrushRenderer.Stamp(pixels, w, h, pos, size, color);
                 traveled += spacing;
             }
-
-            GL.PopMatrix();
-            RenderTexture.active = null;
+            BrushRenderer.Stamp(pixels, w, h, to, size, color);
         }
     }
 }

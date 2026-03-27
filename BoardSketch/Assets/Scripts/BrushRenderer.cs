@@ -1,154 +1,180 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace BoardSketch
 {
     public static class BrushRenderer
     {
-        private static Texture2D _defaultBrushTex;
+        // Cache pre-baked brush alpha masks by diameter
+        private static Dictionary<int, byte[]> _brushCache = new Dictionary<int, byte[]>();
 
-        public static Texture2D GetDefaultBrushTexture()
+        private static byte[] GetBrushAlpha(int diameter)
         {
-            if (_defaultBrushTex != null) return _defaultBrushTex;
+            if (_brushCache.TryGetValue(diameter, out var cached))
+                return cached;
 
-            int size = 64;
-            _defaultBrushTex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            float center = size / 2f;
-            float radius = size / 2f;
+            byte[] alpha = new byte[diameter * diameter];
+            float center = diameter / 2f;
+            float radius = diameter / 2f;
+            float radiusSq = radius * radius;
 
-            Color[] pixels = new Color[size * size];
-            for (int y = 0; y < size; y++)
+            for (int y = 0; y < diameter; y++)
             {
-                for (int x = 0; x < size; x++)
+                float dy = y - center + 0.5f;
+                float dySq = dy * dy;
+                for (int x = 0; x < diameter; x++)
                 {
                     float dx = x - center + 0.5f;
-                    float dy = y - center + 0.5f;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy) / radius;
-                    float alpha = Mathf.Clamp01(1f - Mathf.SmoothStep(0.0f, 1.0f, dist));
-                    pixels[y * size + x] = new Color(1, 1, 1, alpha);
+                    float distSq = dx * dx + dySq;
+                    if (distSq >= radiusSq)
+                    {
+                        alpha[y * diameter + x] = 0;
+                        continue;
+                    }
+                    float dist = Mathf.Sqrt(distSq) / radius;
+                    // SmoothStep falloff
+                    float t = dist * dist * (3f - 2f * dist);
+                    alpha[y * diameter + x] = (byte)((1f - t) * 255f);
                 }
             }
 
-            _defaultBrushTex.SetPixels(pixels);
-            _defaultBrushTex.Apply();
-            _defaultBrushTex.wrapMode = TextureWrapMode.Clamp;
-            return _defaultBrushTex;
+            _brushCache[diameter] = alpha;
+            return alpha;
         }
 
-        public static void StampAlongPath(
-            RenderTexture target,
-            Material brushMat,
-            Vector2 from,
-            Vector2 to,
-            Color color,
-            float size,
+        /// <summary>
+        /// Convert screen position to canvas pixel coordinates (Y-up, matching Texture2D convention).
+        /// </summary>
+        public static Vector2 ScreenToCanvas(Vector2 screenPosition, Camera cam, int canvasW, int canvasH)
+        {
+#if UNITY_EDITOR
+            // Editor: use camera projection to handle arbitrary Game View aspect
+            float screenY = Screen.height - screenPosition.y;
+            Vector3 worldPos = cam.ScreenToWorldPoint(new Vector3(screenPosition.x, screenY, 11f));
+            float rtX = (worldPos.x + 9.6f) / 19.2f * canvasW;
+            float rtY = (worldPos.y + 5.4f) / 10.8f * canvasH;
+            return new Vector2(rtX, rtY);
+#else
+            // Device: screen is 1920x1080. SDK gives Y-down, Texture2D is Y-up.
+            return new Vector2(screenPosition.x, canvasH - screenPosition.y);
+#endif
+        }
+
+        /// <summary>
+        /// Fast brush stamp using pre-baked alpha mask and integer blending.
+        /// </summary>
+        public static void Stamp(Color32[] pixels, int width, int height, Vector2 center, float brushSize, Color32 color)
+        {
+            int diameter = Mathf.Max(Mathf.RoundToInt(brushSize), 2);
+            byte[] brushAlpha = GetBrushAlpha(diameter);
+
+            int cx = Mathf.RoundToInt(center.x);
+            int cy = Mathf.RoundToInt(center.y);
+            int halfD = diameter / 2;
+
+            int brushStartX = 0, brushStartY = 0;
+            int startX = cx - halfD;
+            int startY = cy - halfD;
+            int endX = startX + diameter;
+            int endY = startY + diameter;
+
+            // Clip to canvas bounds
+            if (startX < 0) { brushStartX = -startX; startX = 0; }
+            if (startY < 0) { brushStartY = -startY; startY = 0; }
+            if (endX > width) endX = width;
+            if (endY > height) endY = height;
+
+            int cr = color.r, cg = color.g, cb = color.b;
+
+            for (int py = startY; py < endY; py++)
+            {
+                int by = brushStartY + (py - startY);
+                int canvasRow = py * width;
+                int brushRow = by * diameter;
+
+                for (int px = startX; px < endX; px++)
+                {
+                    int bx = brushStartX + (px - startX);
+                    int a = brushAlpha[brushRow + bx];
+                    if (a == 0) continue;
+
+                    int idx = canvasRow + px;
+                    Color32 dst = pixels[idx];
+
+                    // Integer alpha blend: (src * a + dst * (255 - a)) / 256
+                    int invA = 255 - a;
+                    pixels[idx] = new Color32(
+                        (byte)((cr * a + dst.r * invA) >> 8),
+                        (byte)((cg * a + dst.g * invA) >> 8),
+                        (byte)((cb * a + dst.b * invA) >> 8),
+                        255);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Stamp along a line. Guarantees no gaps even during fast movement.
+        /// </summary>
+        public static void StampLine(Color32[] pixels, int width, int height,
+            Vector2 from, Vector2 to, float brushSize, Color32 color,
             ref Vector2 lastStampPos)
         {
-            float spacing = Mathf.Max(size * 0.25f, 1f);
-            Vector2 dir = to - lastStampPos;
-            float dist = dir.magnitude;
+            float spacing = Mathf.Max(brushSize * 0.3f, 1.5f);
+            Vector2 delta = to - lastStampPos;
+            float dist = delta.magnitude;
 
+            if (dist < 0.5f) return;
+
+            // Always stamp at least at 'to' for responsiveness
             if (dist < spacing)
-                return;
-
-            dir /= dist;
-
-            BeginStamping(target, brushMat, color);
-
-            float traveled = spacing;
-            while (traveled <= dist)
             {
-                Vector2 pos = lastStampPos + dir * traveled;
-                StampQuad(pos, size);
-                traveled += spacing;
+                Stamp(pixels, width, height, to, brushSize, color);
+                lastStampPos = to;
+                return;
             }
 
-            EndStamping();
+            Vector2 dir = delta / dist;
+            float traveled = 0f;
+            while (traveled < dist)
+            {
+                Vector2 pos = lastStampPos + dir * traveled;
+                Stamp(pixels, width, height, pos, brushSize, color);
+                traveled += spacing;
+            }
+            // Always stamp the endpoint
+            Stamp(pixels, width, height, to, brushSize, color);
             lastStampPos = to;
         }
 
-        public static void StampSingle(
-            RenderTexture target,
-            Material brushMat,
-            Vector2 position,
-            Color color,
-            float size)
+        /// <summary>
+        /// Stamp along a Catmull-Rom spline for smooth curves.
+        /// </summary>
+        public static void StampSpline(Color32[] pixels, int width, int height,
+            Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3,
+            float brushSize, Color32 color, ref Vector2 lastStampPos)
         {
-            BeginStamping(target, brushMat, color);
-            StampQuad(position, size);
-            EndStamping();
-        }
+            float spacing = Mathf.Max(brushSize * 0.3f, 1.5f);
 
-        public static void StampAlongPathSmooth(
-            RenderTexture target,
-            Material brushMat,
-            Vector2 p0,
-            Vector2 p1,
-            Vector2 p2,
-            Vector2 p3,
-            Color color,
-            float size,
-            ref Vector2 lastStampPos)
-        {
-            float spacing = Mathf.Max(size * 0.25f, 1f);
-
-            float chordLength = (p2 - p1).magnitude;
-            float controlLength = (p1 - p0).magnitude + (p2 - p1).magnitude + (p3 - p2).magnitude;
-            float estimatedLength = (chordLength + controlLength) / 2f;
-            int steps = Mathf.Max(Mathf.CeilToInt(estimatedLength / spacing), 1);
+            float chordLen = (p2 - p1).magnitude;
+            float ctrlLen = (p1 - p0).magnitude + (p2 - p1).magnitude + (p3 - p2).magnitude;
+            float estLen = Mathf.Max((chordLen + ctrlLen) / 2f, 1f);
+            int steps = Mathf.Max(Mathf.CeilToInt(estLen / spacing), 2);
             float tStep = 1f / steps;
-
-            BeginStamping(target, brushMat, color);
 
             for (int i = 0; i <= steps; i++)
             {
                 float t = i * tStep;
                 Vector2 pos = CatmullRom(p0, p1, p2, p3, t);
 
-                if ((pos - lastStampPos).sqrMagnitude >= spacing * spacing)
+                if ((pos - lastStampPos).sqrMagnitude >= spacing * spacing * 0.8f)
                 {
-                    StampQuad(pos, size);
+                    Stamp(pixels, width, height, pos, brushSize, color);
                     lastStampPos = pos;
                 }
             }
-
-            EndStamping();
+            // Always stamp the endpoint
+            Stamp(pixels, width, height, p2, brushSize, color);
             lastStampPos = p2;
-        }
-
-        /// <summary>
-        /// Convert Board SDK screenPosition (screen pixels, Y-down) to
-        /// RenderTexture pixel coordinates via Camera projection.
-        /// This properly handles Game View aspect ratios that differ from 16:9.
-        /// </summary>
-        public static Vector2 ScreenToRT(Vector2 screenPosition, Camera cam)
-        {
-            // SDK uses Y-down; Camera.ScreenToWorldPoint expects Y-up
-            float screenY = Screen.height - screenPosition.y;
-            Vector3 worldPos = cam.ScreenToWorldPoint(new Vector3(screenPosition.x, screenY, 11f));
-
-            // Quad spans (-9.6, -5.4) to (9.6, 5.4) in world space = 19.2 x 10.8
-            float rtX = (worldPos.x + 9.6f) / 19.2f * 1920f;
-            float rtY = (worldPos.y + 5.4f) / 10.8f * 1080f;
-
-            return new Vector2(rtX, rtY);
-        }
-
-        private static void BeginStamping(RenderTexture target, Material brushMat, Color color)
-        {
-            RenderTexture.active = target;
-            GL.PushMatrix();
-            // Y-down (1080 at bottom, 0 at top) to compensate for RT display flip on Quad
-            GL.LoadPixelMatrix(0, 1920, 1080, 0);
-
-            brushMat.SetColor("_Color", color);
-            brushMat.SetTexture("_BrushTex", GetDefaultBrushTexture());
-            brushMat.SetPass(0);
-        }
-
-        private static void EndStamping()
-        {
-            GL.PopMatrix();
-            RenderTexture.active = null;
         }
 
         private static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
@@ -163,15 +189,13 @@ namespace BoardSketch
             );
         }
 
-        private static void StampQuad(Vector2 center, float size)
+        // Legacy compat
+        public static Texture2D GetDefaultBrushTexture()
         {
-            float half = size / 2f;
-            GL.Begin(GL.QUADS);
-            GL.TexCoord2(0, 0); GL.Vertex3(center.x - half, center.y - half, 0);
-            GL.TexCoord2(1, 0); GL.Vertex3(center.x + half, center.y - half, 0);
-            GL.TexCoord2(1, 1); GL.Vertex3(center.x + half, center.y + half, 0);
-            GL.TexCoord2(0, 1); GL.Vertex3(center.x - half, center.y + half, 0);
-            GL.End();
+            var tex = new Texture2D(2, 2);
+            tex.SetPixels(new[] { Color.white, Color.white, Color.white, Color.white });
+            tex.Apply();
+            return tex;
         }
     }
 }

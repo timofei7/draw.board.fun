@@ -19,5 +19,6 @@ namespace BoardSketch
         }
 
         public Color EffectiveColor => isEraser ? Color.white : color;
+        public Color32 EffectiveColor32 => isEraser ? new Color32(255, 255, 255, 255) : (Color32)color;
     }
 }

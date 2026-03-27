@@ -10,9 +10,14 @@ namespace BoardSketch
 
         public string CurrentSketchId { get; set; }
 
+        [SerializeField] private bool _skipGalleryOnStart;
+
         private void Start()
         {
-            ShowGallery();
+            if (_skipGalleryOnStart)
+                NewSketch();
+            else
+                ShowGallery();
         }
 
         public void ShowGallery()

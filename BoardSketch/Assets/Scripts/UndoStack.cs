@@ -19,26 +19,15 @@ namespace BoardSketch
             _count = 0;
         }
 
-        public void PushSnapshot(RenderTexture rt)
+        public void PushSnapshot(Texture2D tex)
         {
-            // All Texture2D operations must happen on the main thread.
-            // PNG encoding causes a brief hitch (~20-50ms) but is acceptable for V1.
-            var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
-            RenderTexture prev = RenderTexture.active;
-            RenderTexture.active = rt;
-            tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
-            tex.Apply();
-            RenderTexture.active = prev;
-
             byte[] png = tex.EncodeToPNG();
-            Object.Destroy(tex);
-
             _snapshots[_head] = png;
             _head = (_head + 1) % _capacity;
             if (_count < _capacity) _count++;
         }
 
-        public void PopAndApply(RenderTexture target)
+        public void PopAndApply(Texture2D target)
         {
             if (_count == 0) return;
 
@@ -48,12 +37,8 @@ namespace BoardSketch
             byte[] png = _snapshots[_head];
             _snapshots[_head] = null;
 
-            if (png == null) return;
-
-            var tex = new Texture2D(2, 2);
-            tex.LoadImage(png);
-            Graphics.Blit(tex, target);
-            Object.Destroy(tex);
+            if (png != null)
+                target.LoadImage(png);
         }
 
         public void Clear()

@@ -8,6 +8,7 @@ namespace BoardSketch
     {
         [Header("Canvas")]
         [SerializeField] private Renderer _canvasRenderer;
+        [SerializeField] private Material _brushMaterial; // unused now but kept for serialization compat
 
         [Header("Brush Settings")]
         [SerializeField] private float _defaultBrushSize = 8f;
@@ -16,8 +17,16 @@ namespace BoardSketch
         [Header("Piece Tools")]
         [SerializeField] private PieceToolConfig _pieceToolConfig;
 
-        private RenderTexture _drawRT;
-        private Material _brushMat;
+        [Header("Debug")]
+        [SerializeField] private bool _drawTestPatternOnStart = false;
+        [SerializeField] private bool _skipGalleryOnStart;
+
+        private const int kWidth = 1920;
+        private const int kHeight = 1080;
+
+        private Texture2D _canvasTex;
+        private Color32[] _pixels;
+        private bool _pixelsDirty;
         private Material _canvasMat;
         private Camera _cam;
         private Dictionary<int, StrokeState> _activeStrokes = new Dictionary<int, StrokeState>();
@@ -26,7 +35,7 @@ namespace BoardSketch
         private bool _isDirty;
 
         public bool IsDirty => _isDirty;
-        public RenderTexture DrawRT => _drawRT;
+        public RenderTexture DrawRT => null; // Legacy compat
 
         private void Awake()
         {
@@ -34,27 +43,68 @@ namespace BoardSketch
             _cam = Camera.main;
             InitCanvas();
             _undoStack = new UndoStack(_maxUndoSteps);
+            if (_drawTestPatternOnStart)
+                DrawStartupTestPattern();
         }
 
         private void InitCanvas()
         {
-            _drawRT = new RenderTexture(1920, 1080, 0, RenderTextureFormat.ARGB32);
-            _drawRT.Create();
-            ClearToWhite();
+            _canvasTex = new Texture2D(kWidth, kHeight, TextureFormat.RGBA32, false);
+            _canvasTex.filterMode = FilterMode.Bilinear;
+            _pixels = _canvasTex.GetPixels32();
 
-            _brushMat = new Material(Shader.Find("BoardSketch/BrushStamp"));
+            // Clear to white
+            var white = new Color32(255, 255, 255, 255);
+            for (int i = 0; i < _pixels.Length; i++)
+                _pixels[i] = white;
+            _canvasTex.SetPixels32(_pixels);
+            _canvasTex.Apply();
 
-            _canvasMat = new Material(Shader.Find("Unlit/Texture"));
-            _canvasMat.mainTexture = _drawRT;
-
+            // Use the material already assigned to the Quad in the scene.
+            // This avoids Shader.Find which doesn't work reliably in builds.
             if (_canvasRenderer != null)
-                _canvasRenderer.material = _canvasMat;
+            {
+                _canvasMat = _canvasRenderer.material;
+                _canvasMat.mainTexture = _canvasTex;
+            }
+        }
+
+        private void DrawStartupTestPattern()
+        {
+            // Red diagonal to verify rendering works
+            var red = new Color32(255, 50, 50, 255);
+            for (int i = 0; i < 40; i++)
+            {
+                float t = i / 39f;
+                Vector2 pos = new Vector2(t * kWidth, t * kHeight);
+                BrushRenderer.Stamp(_pixels, kWidth, kHeight, pos, 20f, red);
+            }
+            // Blue circle in center
+            var blue = new Color32(50, 100, 230, 255);
+            for (int a = 0; a < 60; a++)
+            {
+                float rad = a / 60f * Mathf.PI * 2f;
+                Vector2 pos = new Vector2(kWidth / 2f + Mathf.Cos(rad) * 200f, kHeight / 2f + Mathf.Sin(rad) * 200f);
+                BrushRenderer.Stamp(_pixels, kWidth, kHeight, pos, 12f, blue);
+            }
+            _canvasTex.SetPixels32(_pixels);
+            _canvasTex.Apply();
+            Debug.Log("[BoardSketch] Test pattern drawn");
         }
 
         private void Update()
         {
             HandleFingerInput();
             HandleGlyphInput();
+
+            // Upload full texture when dirty. With optimized CPU stamping,
+            // this is simpler and avoids dirty-rect edge cases.
+            if (_pixelsDirty)
+            {
+                _canvasTex.SetPixels32(_pixels);
+                _canvasTex.Apply();
+                _pixelsDirty = false;
+            }
         }
 
         private void HandleFingerInput()
@@ -83,22 +133,16 @@ namespace BoardSketch
 
         private void OnStrokeBegan(BoardContact contact)
         {
-            _undoStack.PushSnapshot(_drawRT);
+            _undoStack.PushSnapshot(_canvasTex);
 
-            // Convert SDK position (Y-down) to GL position (Y-up) for rendering
-            Vector2 glPos = BrushRenderer.ScreenToRT(contact.screenPosition, _cam);
+            Vector2 pos = BrushRenderer.ScreenToCanvas(contact.screenPosition, _cam, kWidth, kHeight);
+            Color32 color = _currentTool.EffectiveColor32;
 
-            Color color = _currentTool.EffectiveColor;
-            var stroke = new StrokeState(
-                contact.contactId,
-                glPos,
-                color,
-                _currentTool.brushSize,
-                _currentTool.isEraser
-            );
+            var stroke = new StrokeState(contact.contactId, pos, _currentTool.EffectiveColor, _currentTool.brushSize, _currentTool.isEraser);
             _activeStrokes[contact.contactId] = stroke;
 
-            BrushRenderer.StampSingle(_drawRT, _brushMat, glPos, color, _currentTool.brushSize);
+            BrushRenderer.Stamp(_pixels, kWidth, kHeight, pos, _currentTool.brushSize, color);
+            _pixelsDirty = true;
             _isDirty = true;
         }
 
@@ -107,34 +151,25 @@ namespace BoardSketch
             if (!_activeStrokes.TryGetValue(contact.contactId, out var stroke))
                 return;
 
-            Vector2 glPos = BrushRenderer.ScreenToRT(contact.screenPosition, _cam);
-            Color color = stroke.isEraser ? Color.white : stroke.color;
+            Vector2 pos = BrushRenderer.ScreenToCanvas(contact.screenPosition, _cam, kWidth, kHeight);
+            Color32 color = stroke.isEraser ? new Color32(255, 255, 255, 255) : (Color32)stroke.color;
 
             if (stroke.pointCount >= 3)
             {
-                Vector2 p3Estimate = glPos + (glPos - stroke.prevPosition);
-                BrushRenderer.StampAlongPathSmooth(
-                    _drawRT, _brushMat,
-                    stroke.prevPrevPosition,
-                    stroke.prevPosition,
-                    glPos,
-                    p3Estimate,
-                    color, stroke.brushSize,
-                    ref stroke.lastStampPosition
-                );
+                Vector2 p3Est = pos + (pos - stroke.prevPosition);
+                BrushRenderer.StampSpline(_pixels, kWidth, kHeight,
+                    stroke.prevPrevPosition, stroke.prevPosition, pos, p3Est,
+                    stroke.brushSize, color, ref stroke.lastStampPosition);
             }
             else
             {
-                BrushRenderer.StampAlongPath(
-                    _drawRT, _brushMat,
-                    stroke.prevPosition,
-                    glPos,
-                    color, stroke.brushSize,
-                    ref stroke.lastStampPosition
-                );
+                BrushRenderer.StampLine(_pixels, kWidth, kHeight,
+                    stroke.prevPosition, pos, stroke.brushSize, color,
+                    ref stroke.lastStampPosition);
             }
 
-            stroke.AddPoint(glPos);
+            stroke.AddPoint(pos);
+            _pixelsDirty = true;
         }
 
         private void HandleGlyphInput()
@@ -147,47 +182,33 @@ namespace BoardSketch
 
                 if (_pieceToolConfig == null)
                 {
-                    // Discovery mode: log any detected glyph
                     if (glyph.phase == BoardContactPhase.Began)
-                        Debug.Log("[BoardSketch] Glyph discovered: id=" + glyph.glyphId + " orientation=" + glyph.orientation);
+                        Debug.Log("[BoardSketch] Glyph discovered: id=" + glyph.glyphId);
                     continue;
                 }
 
                 var dial = _pieceToolConfig.GetDial(glyph.glyphId);
-                if (dial == null)
-                {
-                    if (glyph.phase == BoardContactPhase.Began)
-                        Debug.Log("[BoardSketch] Unknown glyph id=" + glyph.glyphId);
-                    continue;
-                }
+                if (dial == null) continue;
 
-                // Process dial rotation every frame
                 switch (dial.dialType)
                 {
                     case PieceDialType.ColorWheel:
-                        var color = PieceToolConfig.OrientationToColor(glyph.orientation);
-                        SetColor(color);
+                        SetColor(PieceToolConfig.OrientationToColor(glyph.orientation));
                         OnToolChangedByPiece?.Invoke();
                         break;
-
                     case PieceDialType.BrushSize:
-                        float size = PieceToolConfig.OrientationToSize(glyph.orientation, dial.minValue, dial.maxValue);
-                        SetBrushSize(size);
+                        SetBrushSize(PieceToolConfig.OrientationToSize(glyph.orientation, dial.minValue, dial.maxValue));
                         OnToolChangedByPiece?.Invoke();
                         break;
                 }
             }
         }
 
-        /// <summary>
-        /// Fired when a piece dial changes the current tool, so the toolbar can update its indicators.
-        /// </summary>
         public event System.Action OnToolChangedByPiece;
-
         public Color CurrentColor => _currentTool.color;
         public float CurrentBrushSize => _currentTool.brushSize;
 
-        // --- Public API for toolbar ---
+        // --- Public API ---
 
         public void SetColor(Color color)
         {
@@ -208,38 +229,43 @@ namespace BoardSketch
         public void Undo()
         {
             if (_undoStack.CanUndo)
-                _undoStack.PopAndApply(_drawRT);
+            {
+                _undoStack.PopAndApply(_canvasTex);
+                _pixels = _canvasTex.GetPixels32();
+            }
         }
 
         public void ClearCanvas()
         {
-            _undoStack.PushSnapshot(_drawRT);
-            ClearToWhite();
+            _undoStack.PushSnapshot(_canvasTex);
+            var white = new Color32(255, 255, 255, 255);
+            for (int i = 0; i < _pixels.Length; i++)
+                _pixels[i] = white;
+            _canvasTex.SetPixels32(_pixels);
+            _canvasTex.Apply();
             _isDirty = true;
         }
 
         public void LoadFromPNG(byte[] pngData)
         {
-            var tex = new Texture2D(2, 2);
-            tex.LoadImage(pngData);
-            Graphics.Blit(tex, _drawRT);
-            Object.Destroy(tex);
+            _canvasTex.LoadImage(pngData);
+            _pixels = _canvasTex.GetPixels32();
             _undoStack.Clear();
             _isDirty = false;
         }
 
+        public Color32[] GetPixels() => _pixels;
+
+        public void ApplyPixels()
+        {
+            _canvasTex.SetPixels32(_pixels);
+            _canvasTex.Apply();
+            _isDirty = true;
+        }
+
         public byte[] ExportToPNG()
         {
-            var tex = new Texture2D(_drawRT.width, _drawRT.height, TextureFormat.RGBA32, false);
-            RenderTexture prev = RenderTexture.active;
-            RenderTexture.active = _drawRT;
-            tex.ReadPixels(new Rect(0, 0, _drawRT.width, _drawRT.height), 0, 0);
-            tex.Apply();
-            RenderTexture.active = prev;
-
-            byte[] png = tex.EncodeToPNG();
-            Object.Destroy(tex);
-            return png;
+            return _canvasTex.EncodeToPNG();
         }
 
         public void MarkClean()
@@ -247,23 +273,10 @@ namespace BoardSketch
             _isDirty = false;
         }
 
-        private void ClearToWhite()
-        {
-            RenderTexture prev = RenderTexture.active;
-            RenderTexture.active = _drawRT;
-            GL.Clear(true, true, Color.white);
-            RenderTexture.active = prev;
-        }
-
         private void OnDestroy()
         {
-            if (_drawRT != null)
-            {
-                _drawRT.Release();
-                Object.Destroy(_drawRT);
-            }
-            if (_brushMat != null) Object.Destroy(_brushMat);
-            if (_canvasMat != null) Object.Destroy(_canvasMat);
+            if (_canvasTex != null) Destroy(_canvasTex);
+            if (_canvasMat != null) Destroy(_canvasMat);
         }
     }
 }

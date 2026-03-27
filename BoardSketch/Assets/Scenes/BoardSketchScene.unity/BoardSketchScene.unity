@@ -1940,7 +1940,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: cac35da0cc802472bbf8bea53c5970b5, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -2517,9 +2517,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BoardSketch.SketchManager
   _canvasRenderer: {fileID: 1231844196}
+  _brushMaterial: {fileID: 2100000, guid: 76d94690c83824779962ef78cafa76f7, type: 2}
   _defaultBrushSize: 8
   _maxUndoSteps: 20
   _pieceToolConfig: {fileID: 0}
+  _drawTestPatternOnStart: 1
+  _skipGalleryOnStart: 0
 --- !u!4 &1648580508
 Transform:
   m_ObjectHideFlags: 0
@@ -2875,6 +2878,7 @@ MonoBehaviour:
   _sketchManager: {fileID: 1648580507}
   _galleryView: {fileID: 1653755152}
   _canvasView: {fileID: 1159463778}
+  _skipGalleryOnStart: 1
 --- !u!1 &1828705743
 GameObject:
   m_ObjectHideFlags: 0
