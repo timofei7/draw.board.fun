@@ -26,5 +26,5 @@ MonoBehaviour:
   - glyphId: 7
     label: Ship Orange - Eraser
     dialType: 2
-    minValue: 2
-    maxValue: 40
+    minValue: 30
+    maxValue: 256

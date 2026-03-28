@@ -49,5 +49,11 @@ namespace BoardSketch
             float t = Mathf.Repeat(radians / (2f * Mathf.PI), 1f);
             return Mathf.Lerp(min, max, t);
         }
+
+        public static float OrientationToSizeInverted(float radians, float min, float max)
+        {
+            float t = Mathf.Repeat(radians / (2f * Mathf.PI), 1f);
+            return Mathf.Lerp(max, min, t);
+        }
     }
 }

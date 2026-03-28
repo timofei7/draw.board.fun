@@ -112,22 +112,27 @@ namespace BoardSketch
         {
             var contacts = BoardInput.GetActiveContacts(BoardContactType.Finger);
 
-            // Filter out phantom finger contacts near glyph positions.
-            // The simulator generates both a finger and glyph from the same click.
+            // Filter phantom finger contacts from glyph placement clicks.
+            // Only filter fingers with Began phase that are near a glyph with Began phase
+            // (same click creates both). Once placed, fingers near glyphs can draw normally.
             var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
 
             foreach (var contact in contacts)
             {
-                bool nearGlyph = false;
-                foreach (var g in glyphs)
+                if (contact.phase == BoardContactPhase.Began)
                 {
-                    if ((contact.screenPosition - g.screenPosition).sqrMagnitude < 10000f) // within ~100px
+                    bool phantomClick = false;
+                    foreach (var g in glyphs)
                     {
-                        nearGlyph = true;
-                        break;
+                        if (g.phase == BoardContactPhase.Began &&
+                            (contact.screenPosition - g.screenPosition).sqrMagnitude < 400f) // within ~20px
+                        {
+                            phantomClick = true;
+                            break;
+                        }
                     }
+                    if (phantomClick) continue;
                 }
-                if (nearGlyph) continue;
                 switch (contact.phase)
                 {
                     case BoardContactPhase.Began:
@@ -209,8 +214,16 @@ namespace BoardSketch
                     continue;
                 }
 
+                if (glyph.phase == BoardContactPhase.Began)
+                    Debug.Log("[BoardSketch] Glyph contact: id=" + glyph.glyphId + " phase=" + glyph.phase + " type=" + glyph.type);
+
                 var dial = _pieceToolConfig.GetDial(glyph.glyphId);
-                if (dial == null) continue;
+                if (dial == null)
+                {
+                    if (glyph.phase == BoardContactPhase.Began)
+                        Debug.Log("[BoardSketch] No config for glyphId=" + glyph.glyphId);
+                    continue;
+                }
 
                 if (glyph.phase.IsEndedOrCanceled())
                 {
@@ -220,13 +233,17 @@ namespace BoardSketch
                         Destroy(ind.gameObject);
                         _activeIndicators.Remove(glyph.contactId);
                     }
-                    if (dial.dialType == PieceDialType.Eraser && _previousTool != null)
+                    if (dial.dialType == PieceDialType.Eraser)
                     {
-                        _currentTool.color = _previousTool.color;
-                        _currentTool.brushSize = _previousTool.brushSize;
-                        _currentTool.isEraser = false;
-                        _previousTool = null;
-                        OnToolChangedByPiece?.Invoke();
+                        _activeStrokes.Remove(glyph.contactId);
+                        if (_previousTool != null)
+                        {
+                            _currentTool.color = _previousTool.color;
+                            _currentTool.brushSize = _previousTool.brushSize;
+                            _currentTool.isEraser = false;
+                            _previousTool = null;
+                            OnToolChangedByPiece?.Invoke();
+                        }
                     }
                     continue;
                 }
@@ -242,13 +259,7 @@ namespace BoardSketch
                         _activeIndicators[glyph.contactId] = indicator;
                     }
 
-                    // Save tool state before eraser
-                    if (dial.dialType == PieceDialType.Eraser)
-                    {
-                        _previousTool = new ToolState(_currentTool.color, _currentTool.brushSize, _currentTool.isEraser);
-                        SetEraser();
-                        OnToolChangedByPiece?.Invoke();
-                    }
+                    // Eraser activation is handled by isTouched in the dial switch
                 }
 
                 // Update indicator position and value every frame
@@ -267,6 +278,59 @@ namespace BoardSketch
                         break;
                     case PieceDialType.BrushSize:
                         SetBrushSize(PieceToolConfig.OrientationToSize(glyph.orientation, dial.minValue, dial.maxValue));
+                        OnToolChangedByPiece?.Invoke();
+                        break;
+                    case PieceDialType.Eraser:
+                        float eraserSize = PieceToolConfig.OrientationToSizeInverted(glyph.orientation, dial.minValue, dial.maxValue);
+
+                        if (glyph.isTouched)
+                        {
+                            // Holding the piece — eraser active
+                            if (!_currentTool.isEraser)
+                            {
+                                _previousTool = new ToolState(_currentTool.color, _currentTool.brushSize, _currentTool.isEraser);
+                                SetEraser();
+                            }
+                            SetBrushSize(eraserSize);
+
+                            // Drag to erase
+                            if (glyph.phase == BoardContactPhase.Moved || glyph.phase == BoardContactPhase.Began)
+                            {
+                                Vector2 pos = BrushRenderer.ScreenToCanvas(glyph.screenPosition, _cam, kWidth, kHeight);
+                                var white = new Color32(255, 255, 255, 255);
+
+                                if (!_activeStrokes.ContainsKey(glyph.contactId))
+                                {
+                                    _undoStack.PushSnapshot(_canvasTex);
+                                    var stroke = new StrokeState(glyph.contactId, pos, Color.white, eraserSize, true);
+                                    _activeStrokes[glyph.contactId] = stroke;
+                                    BrushRenderer.StampHard(_pixels, kWidth, kHeight, pos, eraserSize, white);
+                                }
+                                else
+                                {
+                                    var stroke = _activeStrokes[glyph.contactId];
+                                    stroke.brushSize = eraserSize;
+                                    BrushRenderer.StampLineHard(_pixels, kWidth, kHeight,
+                                        stroke.prevPosition, pos, eraserSize, white,
+                                        ref stroke.lastStampPosition);
+                                    stroke.AddPoint(pos);
+                                }
+                                _pixelsDirty = true;
+                                _isDirty = true;
+                            }
+                        }
+                        else
+                        {
+                            // Released the piece (still on board) — revert to draw mode
+                            _activeStrokes.Remove(glyph.contactId);
+                            if (_previousTool != null)
+                            {
+                                _currentTool.color = _previousTool.color;
+                                _currentTool.brushSize = _previousTool.brushSize;
+                                _currentTool.isEraser = false;
+                                _previousTool = null;
+                            }
+                        }
                         OnToolChangedByPiece?.Invoke();
                         break;
                 }
@@ -319,6 +383,7 @@ namespace BoardSketch
 
         public void ClearCanvas()
         {
+            Debug.Log("[BoardSketch] ClearCanvas called");
             _undoStack.PushSnapshot(_canvasTex);
             var white = new Color32(255, 255, 255, 255);
             for (int i = 0; i < _pixels.Length; i++)

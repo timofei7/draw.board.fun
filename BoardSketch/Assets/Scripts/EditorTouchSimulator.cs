@@ -41,9 +41,19 @@ namespace BoardSketch
         /// <summary>
         /// Auto-enables mouse-as-finger simulation when entering Play mode.
         /// </summary>
-        // Auto-enable removed — it was enabling mouse-as-finger which conflicts
-        // with glyph placement in the Board Simulator.
-        // Use Board > Input > Simulator manually to test both fingers and pieces.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void AutoEnableMouseSimulation()
+        {
+            // Mouse-as-finger needed for toolbar buttons to work via BoardUIInputModule.
+            // Phantom finger contacts near glyph placements are filtered in SketchManager.
+            BoardContactSimulation.Enable();
+            var sim = BoardContactSimulation.instance;
+            if (sim != null)
+            {
+                sim.useMouseAsFinger = true;
+                Debug.Log("[EditorTouchSimulator] Mouse-as-finger enabled. Phantom fingers near glyphs are filtered.");
+            }
+        }
 
         /// <summary>
         /// Menu item to run a programmatic touch test during Play mode.

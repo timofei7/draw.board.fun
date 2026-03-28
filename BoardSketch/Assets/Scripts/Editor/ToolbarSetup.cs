@@ -315,7 +315,9 @@ namespace BoardSketch.Editor
                 {
                     glyphId = 7,
                     label = "Ship Orange - Eraser",
-                    dialType = PieceDialType.Eraser
+                    dialType = PieceDialType.Eraser,
+                    minValue = 30f,
+                    maxValue = 256f
                 }
             };
 

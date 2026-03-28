@@ -189,6 +189,64 @@ namespace BoardSketch
             );
         }
 
+        /// <summary>
+        /// Hard-edged stamp for eraser — sets all pixels within radius to solid color, no alpha blending.
+        /// </summary>
+        public static void StampHard(Color32[] pixels, int width, int height, Vector2 center, float brushSize, Color32 color)
+        {
+            int radius = Mathf.CeilToInt(brushSize / 2f);
+            int cx = Mathf.RoundToInt(center.x);
+            int cy = Mathf.RoundToInt(center.y);
+            float radiusSq = radius * radius;
+
+            int startX = Mathf.Max(0, cx - radius);
+            int endX = Mathf.Min(width - 1, cx + radius);
+            int startY = Mathf.Max(0, cy - radius);
+            int endY = Mathf.Min(height - 1, cy + radius);
+
+            for (int py = startY; py <= endY; py++)
+            {
+                float dy = py - center.y;
+                float dySq = dy * dy;
+                int row = py * width;
+                for (int px = startX; px <= endX; px++)
+                {
+                    float dx = px - center.x;
+                    if (dx * dx + dySq <= radiusSq)
+                        pixels[row + px] = color;
+                }
+            }
+        }
+
+        public static void StampLineHard(Color32[] pixels, int width, int height,
+            Vector2 from, Vector2 to, float brushSize, Color32 color,
+            ref Vector2 lastStampPos)
+        {
+            float spacing = Mathf.Max(brushSize * 0.3f, 1.5f);
+            Vector2 delta = to - lastStampPos;
+            float dist = delta.magnitude;
+
+            if (dist < 0.5f) return;
+
+            if (dist < spacing)
+            {
+                StampHard(pixels, width, height, to, brushSize, color);
+                lastStampPos = to;
+                return;
+            }
+
+            Vector2 dir = delta / dist;
+            float traveled = 0f;
+            while (traveled < dist)
+            {
+                Vector2 pos = lastStampPos + dir * traveled;
+                StampHard(pixels, width, height, pos, brushSize, color);
+                traveled += spacing;
+            }
+            StampHard(pixels, width, height, to, brushSize, color);
+            lastStampPos = to;
+        }
+
         // Legacy compat
         public static Texture2D GetDefaultBrushTexture()
         {

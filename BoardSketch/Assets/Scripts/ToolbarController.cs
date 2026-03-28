@@ -68,8 +68,8 @@ namespace BoardSketch
             if (_colorIndicator) _colorIndicator.color = _sketchManager.CurrentColor;
             if (_sizeIndicator)
             {
-                float scale = _sketchManager.CurrentBrushSize / 24f;
-                _sizeIndicator.rectTransform.localScale = Vector3.one * Mathf.Max(scale, 0.3f);
+                float scale = Mathf.Clamp(_sketchManager.CurrentBrushSize / 24f, 0.3f, 2f);
+                _sizeIndicator.rectTransform.localScale = Vector3.one * scale;
             }
         }
 
@@ -92,8 +92,8 @@ namespace BoardSketch
             _sketchManager.SetBrushSize(size);
             if (_sizeIndicator)
             {
-                float scale = size / 24f;
-                _sizeIndicator.rectTransform.localScale = Vector3.one * Mathf.Max(scale, 0.3f);
+                float scale = Mathf.Clamp(size / 24f, 0.3f, 2f);
+                _sizeIndicator.rectTransform.localScale = Vector3.one * scale;
             }
         }
 
