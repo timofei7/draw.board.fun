@@ -112,27 +112,23 @@ namespace BoardSketch
         {
             var contacts = BoardInput.GetActiveContacts(BoardContactType.Finger);
 
-            // Filter phantom finger contacts from glyph placement clicks.
-            // Only filter fingers with Began phase that are near a glyph with Began phase
-            // (same click creates both). Once placed, fingers near glyphs can draw normally.
+            // Filter phantom finger contacts that the simulator generates alongside glyphs.
+            // Any finger very close to any active glyph is a phantom from the same mouse interaction.
             var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
 
             foreach (var contact in contacts)
             {
-                if (contact.phase == BoardContactPhase.Began)
+                bool isPhantom = false;
+                foreach (var g in glyphs)
                 {
-                    bool phantomClick = false;
-                    foreach (var g in glyphs)
+                    if ((contact.screenPosition - g.screenPosition).sqrMagnitude < 900f) // within ~30px
                     {
-                        if (g.phase == BoardContactPhase.Began &&
-                            (contact.screenPosition - g.screenPosition).sqrMagnitude < 400f) // within ~20px
-                        {
-                            phantomClick = true;
-                            break;
-                        }
+                        isPhantom = true;
+                        break;
                     }
-                    if (phantomClick) continue;
                 }
+                if (isPhantom) continue;
+
                 switch (contact.phase)
                 {
                     case BoardContactPhase.Began:
@@ -277,7 +273,7 @@ namespace BoardSketch
                         OnToolChangedByPiece?.Invoke();
                         break;
                     case PieceDialType.BrushSize:
-                        SetBrushSize(PieceToolConfig.OrientationToSize(glyph.orientation, dial.minValue, dial.maxValue));
+                        SetBrushSize(PieceToolConfig.OrientationToSizeInverted(glyph.orientation, dial.minValue, dial.maxValue));
                         OnToolChangedByPiece?.Invoke();
                         break;
                     case PieceDialType.Eraser:
