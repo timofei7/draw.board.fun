@@ -62,7 +62,7 @@ namespace BoardSketch
 
         public void UpdatePosition(Vector2 screenPos)
         {
-            // Position the indicator at the piece's screen location
+            // For ScreenSpaceOverlay, transform.position IS screen pixels.
             _rect.position = new Vector3(screenPos.x, screenPos.y, 0);
         }
 
@@ -72,29 +72,32 @@ namespace BoardSketch
 
             if (_dialType == PieceDialType.ColorWheel)
             {
-                // Move dot around the ring at the hue angle
+                // SDK orientation is clockwise from vertical: (sin, cos) maps to (x, y) in UI space
                 float rad = orientation;
-                float dotDist = kRingSize * 0.38f;
+                float dotDist = kRingSize * 0.44f;
                 if (_dotRect != null)
                 {
                     _dotRect.anchoredPosition = new Vector2(
-                        Mathf.Cos(rad) * dotDist,
-                        Mathf.Sin(rad) * dotDist
+                        Mathf.Sin(rad) * dotDist,
+                        -Mathf.Cos(rad) * dotDist
                     );
-                    // Color the dot to match selected hue
-                    float hue = Mathf.Repeat(orientation / (2f * Mathf.PI), 1f);
-                    _indicatorDot.color = Color.HSVToRGB(hue, 1f, 1f);
+                    // Sample hue using same atan2(y,x) formula as the ring texture
+                    float dotX = Mathf.Sin(rad);
+                    float dotY = -Mathf.Cos(rad);
+                    float ringAngle = Mathf.Atan2(dotY, dotX);
+                    float hue = Mathf.Repeat(ringAngle / (2f * Mathf.PI), 1f);
+                    _indicatorDot.color = Color.HSVToRGB(hue, 0.9f, 1f);
                 }
             }
             else if (_dialType == PieceDialType.BrushSize)
             {
                 float rad = orientation;
-                float dotDist = kRingSize * 0.38f;
+                float dotDist = kRingSize * 0.44f;
                 if (_dotRect != null)
                 {
                     _dotRect.anchoredPosition = new Vector2(
-                        Mathf.Cos(rad) * dotDist,
-                        Mathf.Sin(rad) * dotDist
+                        Mathf.Sin(rad) * dotDist,
+                        -Mathf.Cos(rad) * dotDist
                     );
                     // Scale dot to represent current brush size
                     float t = Mathf.Repeat(orientation / (2f * Mathf.PI), 1f);

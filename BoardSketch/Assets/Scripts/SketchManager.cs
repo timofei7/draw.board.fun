@@ -27,6 +27,7 @@ namespace BoardSketch
         private Texture2D _canvasTex;
         private Color32[] _pixels;
         private bool _pixelsDirty;
+        private int _logCounter;
         private Material _canvasMat;
         private Camera _cam;
         private Dictionary<int, StrokeState> _activeStrokes = new Dictionary<int, StrokeState>();
@@ -111,8 +112,22 @@ namespace BoardSketch
         {
             var contacts = BoardInput.GetActiveContacts(BoardContactType.Finger);
 
+            // Filter out phantom finger contacts near glyph positions.
+            // The simulator generates both a finger and glyph from the same click.
+            var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
+
             foreach (var contact in contacts)
             {
+                bool nearGlyph = false;
+                foreach (var g in glyphs)
+                {
+                    if ((contact.screenPosition - g.screenPosition).sqrMagnitude < 10000f) // within ~100px
+                    {
+                        nearGlyph = true;
+                        break;
+                    }
+                }
+                if (nearGlyph) continue;
                 switch (contact.phase)
                 {
                     case BoardContactPhase.Began:

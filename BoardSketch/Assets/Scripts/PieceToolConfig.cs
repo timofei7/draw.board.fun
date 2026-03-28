@@ -36,7 +36,11 @@ namespace BoardSketch
 
         public static Color OrientationToColor(float radians)
         {
-            float hue = Mathf.Repeat(radians / (2f * Mathf.PI), 1f);
+            // Match the color wheel ring texture's atan2(y,x) mapping
+            float dotX = Mathf.Sin(radians);
+            float dotY = -Mathf.Cos(radians);
+            float ringAngle = Mathf.Atan2(dotY, dotX);
+            float hue = Mathf.Repeat(ringAngle / (2f * Mathf.PI), 1f);
             return Color.HSVToRGB(hue, 0.8f, 0.9f);
         }
 
